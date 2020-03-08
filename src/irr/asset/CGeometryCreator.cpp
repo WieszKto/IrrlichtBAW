@@ -447,69 +447,65 @@ CGeometryCreator::return_type CGeometryCreator::createConeMesh(	float radius, fl
 																const video::SColor& colorBottom,
 																float oblique) const
 {
-#ifndef NEW_SHADERS
-    const size_t vtxCnt = tesselation+2u;
-    auto vtxBuf = core::make_smart_refctd_ptr<asset::ICPUBuffer>(vtxCnt * sizeof(ConeVertex));
-    ConeVertex* vertices = reinterpret_cast<ConeVertex*>(vtxBuf->getPointer());
-    std::fill(vertices, vertices + vtxCnt, ConeVertex(core::vectorSIMDf(0.f), 0u, colorBottom));
+	return_type retval;
 
-    const float step = (2.f*core::PI<float>()) / tesselation;
-    for (uint32_t i = 2u; i < vtxCnt; ++i)
-    {
-        const core::vectorSIMDf p(std::cos(i*step), 0.f, std::sin(i*step), 0.f);
-        memcpy(vertices[i].pos, (p*radius).pointer, 12u);
-        vertices[i].normal = quantizeNormal2_10_10_10(core::normalize(p));
-    }
-    const uint32_t peakIx = 0u;
-    const uint32_t bottomCenterIx = 1u;
+	constexpr size_t vertexSize = sizeof(CGeometryCreator::ConeVertex);
+	retval.inputParams = { 0b1111u,0b1u,{
+							{0u, EF_R32G32B32_SFLOAT, offsetof(ConeVertex, pos)},
+							{0u,EF_R8G8B8A8_UNORM, offsetof(ConeVertex, color)},
+							{0u,EF_R8G8_USCALED,offsetof(ConeVertex, uv)},
+							{0u,EF_A2B10G10R10_SNORM_PACK32, offsetof(ConeVertex, normal)},
+}						,{vertexSize,EVIR_PER_VERTEX} };
 
-    const core::vectorSIMDf p(oblique, length, 0.f, 0.f);
-    memcpy(vertices[peakIx].pos, p.pointer, 12u);
-    vertices[peakIx].normal = quantizeNormal2_10_10_10(core::vectorSIMDf(0.f, 1.f, 0.f, 0.f));
-    colorTop.toOpenGLColor(vertices[peakIx].color);
-    memset(vertices[bottomCenterIx].pos, 0, 12u);
-    vertices[bottomCenterIx].normal = quantizeNormal2_10_10_10(core::vectorSIMDf(0.f, -1.f, 0.f, 0.f));
+	const size_t vtxCnt = tesselation + 2u;
+	auto vtxBuf = core::make_smart_refctd_ptr<asset::ICPUBuffer>(vtxCnt * sizeof(ConeVertex));
+	ConeVertex* vertices = reinterpret_cast<ConeVertex*>(vtxBuf->getPointer());
+	std::fill(vertices, vertices + vtxCnt, ConeVertex(core::vectorSIMDf(0.f), 0u, colorBottom));
+	const float step = (2.f * core::PI<float>()) / tesselation;
+	for (uint32_t i = 2u; i < vtxCnt; ++i)
+	{
+		const core::vectorSIMDf p(std::cos(i * step), 0.f, std::sin(i * step), 0.f);
+		memcpy(vertices[i].pos, (p * radius).pointer, 12u);
+		vertices[i].normal = quantizeNormal2_10_10_10(core::normalize(p));
+	}
+	const uint32_t peakIx = 0u;
+	const uint32_t bottomCenterIx = 1u;
 
-    auto idxBuf = core::make_smart_refctd_ptr<asset::ICPUBuffer>(2u*3u*tesselation*sizeof(uint16_t));
-    uint16_t* indices = (uint16_t*)idxBuf->getPointer();
-    
-    for (uint32_t i = 2u, j = 0u; i < vtxCnt; ++i)
-    {
-        indices[j++] = peakIx;
-        indices[j++] = i+1u == vtxCnt ? 2u : i+1u;
-        indices[j++] = i;
-    }
-    
-    indices += idxBuf->getSize()/2u/sizeof(uint16_t);
+	const core::vectorSIMDf p(oblique, length, 0.f, 0.f);
+	memcpy(vertices[peakIx].pos, p.pointer, 12u);
+	vertices[peakIx].normal = quantizeNormal2_10_10_10(core::vectorSIMDf(0.f, 1.f, 0.f, 0.f));
+	colorTop.toOpenGLColor(vertices[peakIx].color);
+	memset(vertices[bottomCenterIx].pos, 0, 12u);
+	vertices[bottomCenterIx].normal = quantizeNormal2_10_10_10(core::vectorSIMDf(0.f, -1.f, 0.f, 0.f));
 
-    for (uint32_t i = 2u, j = 0u; i < vtxCnt; ++i)
-    {
-        indices[j++] = bottomCenterIx;
-        indices[j++] = i;
-        indices[j++] = i+1u == vtxCnt ? 2u : i+1u;
-    }
+	constexpr uint32_t rows = 2u;
+	retval.indexCount = rows * 3u * tesselation;
 
-    auto mesh = core::make_smart_refctd_ptr<asset::CCPUMesh>();
-    auto meshbuf = core::make_smart_refctd_ptr<asset::ICPUMeshBuffer>();
-    auto desc = core::make_smart_refctd_ptr<asset::ICPUMeshDataFormatDesc>();
-    desc->setVertexAttrBuffer(core::smart_refctd_ptr(vtxBuf), asset::EVAI_ATTR0, asset::EF_R32G32B32_SFLOAT, sizeof(ConeVertex), offsetof(ConeVertex, pos));
-    desc->setVertexAttrBuffer(core::smart_refctd_ptr(vtxBuf), asset::EVAI_ATTR1, asset::EF_R8G8B8A8_UNORM, sizeof(ConeVertex), offsetof(ConeVertex, color));
-    desc->setVertexAttrBuffer(core::smart_refctd_ptr(vtxBuf), asset::EVAI_ATTR3, asset::EF_A2B10G10R10_SNORM_PACK32, sizeof(ConeVertex), offsetof(ConeVertex, normal));
-    meshbuf->setIndexCount(idxBuf->getSize()/2u);
-	desc->setIndexBuffer(std::move(idxBuf));
-    meshbuf->setIndexType(asset::EIT_16BIT);
-    meshbuf->setPrimitiveType(asset::EPT_TRIANGLES);
-    meshbuf->setMeshDataAndFormat(std::move(desc));
-	meshbuf->recalculateBoundingBox();
+	auto idxBuf = core::make_smart_refctd_ptr<asset::ICPUBuffer>(retval.indexCount * sizeof(uint16_t));
+	uint16_t* indices = (uint16_t*)idxBuf->getPointer();
 
-    mesh->addMeshBuffer(std::move(meshbuf));
+	for (uint32_t i = 2u, j = 0u; i < vtxCnt; ++i)
+	{
+		indices[j++] = peakIx;
+		indices[j++] = i + 1u == vtxCnt ? 2u : i + 1u;
+		indices[j++] = i;
+	}
 
-    mesh->recalculateBoundingBox(true);
+	indices += idxBuf->getSize() / 2u / sizeof(uint16_t);
 
-    return mesh;
-#else
-	return {};
-#endif
+	for (uint32_t i = 2u, j = 0u; i < vtxCnt; ++i)
+	{
+		indices[j++] = bottomCenterIx;
+		indices[j++] = i;
+		indices[j++] = i + 1u == vtxCnt ? 2u : i + 1u;
+	}
+
+	retval.indexBuffer = { 0ull, std::move(idxBuf) };
+	retval.bindings[0] = { 0ull, std::move(vtxBuf) };
+	retval.indexType = { asset::EIT_16BIT };
+
+	return retval;
+
 }
 
 

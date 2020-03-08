@@ -112,6 +112,7 @@ int main()
 	auto cylinderGeometry = geometryCreator->createCylinderMesh(2, 2, 20);
 	auto rectangleGeometry = geometryCreator->createRectangleMesh(irr::core::vector2df_SIMD(1.5, 3));
 	auto diskGeometry = geometryCreator->createDiskMesh(2, 30);
+	auto coneGeometry = geometryCreator->createConeMesh(2, 6, 40);
 
 	auto createGPUSpecializedShaderFromSource = [=](const char* source, asset::ISpecializedShader::E_SHADER_STAGE stage)
 	{
@@ -192,11 +193,13 @@ int main()
 	auto gpuCylinder = createGPUMeshBufferAndItsPipeline(cylinderGeometry);
 	auto gpuRectangle = createGPUMeshBufferAndItsPipeline(rectangleGeometry);
 	auto gpuDisk = createGPUMeshBufferAndItsPipeline(diskGeometry);
+	auto gpuCone = createGPUMeshBufferAndItsPipeline(coneGeometry);
 
 	Objects cpuGpuObjects =
 	{
 		std::make_pair(cubeGeometry, gpuCube),
 		std::make_pair(sphereGeometry, gpuSphere),
+		std::make_pair(coneGeometry, gpuCone),
 		std::make_pair(cylinderGeometry, gpuCylinder),
 		std::make_pair(rectangleGeometry, gpuRectangle),
 		std::make_pair(diskGeometry, gpuDisk)
