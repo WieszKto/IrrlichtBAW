@@ -50,6 +50,7 @@ namespace video
         // GL_DISPATCH_INDIRECT_BUFFER 
         GSB_DISPATCH_INDIRECT = 1u << 4,
         GSB_PUSH_CONSTANTS = 1u << 5,
+        GSB_PIXEL_PACK_UNPACK = 1u << 6,
         // flush everything
         GSB_ALL = ~0x0u
     };
@@ -177,6 +178,18 @@ struct SOpenGLState
     struct {
         SDescSetBnd descSets[IGPUPipelineLayout::DESCRIPTOR_SET_COUNT];
     } descriptorsParams[E_PIPELINE_BIND_POINT::EPBP_COUNT];
+
+    struct SPixelPackUnpack {
+        core::smart_refctd_ptr<const COpenGLBuffer> buffer;
+        GLint alignment = 4;
+        GLint rowLength = 0;
+        GLint imgHeight = 0;
+        GLint BCwidth = 0;
+        GLint BCheight = 0;
+        GLint BCdepth = 0;
+    };
+    SPixelPackUnpack pixelPack;
+    SPixelPackUnpack pixelUnpack;
 };
 
 
@@ -638,7 +651,7 @@ class COpenGLDriver final : public CNullDriver, public COpenGLExtensionHandler
         ) override;
 
         core::smart_refctd_ptr<IGPURenderpassIndependentPipeline> createGPURenderpassIndependentPipeline(
-            core::smart_refctd_ptr<IGPURenderpassIndependentPipeline>&& _parent,
+			IGPUPipelineCache* _pipelineCache,
             core::smart_refctd_ptr<IGPUPipelineLayout>&& _layout,
             IGPUSpecializedShader** _shadersBegin, IGPUSpecializedShader** _shadersEnd,
             const asset::SVertexInputParams& _vertexInputParams,
@@ -648,10 +661,12 @@ class COpenGLDriver final : public CNullDriver, public COpenGLExtensionHandler
         ) override;
 
         virtual core::smart_refctd_ptr<IGPUComputePipeline> createGPUComputePipeline(
-            core::smart_refctd_ptr<IGPUComputePipeline>&& _parent,
+			IGPUPipelineCache* _pipelineCache,
             core::smart_refctd_ptr<IGPUPipelineLayout>&& _layout,
             core::smart_refctd_ptr<IGPUSpecializedShader>&& _shader
         ) override;
+
+		core::smart_refctd_ptr<IGPUPipelineCache> createGPUPipelineCache() override;
 
         core::smart_refctd_ptr<IGPUDescriptorSet> createGPUDescriptorSet(core::smart_refctd_ptr<IGPUDescriptorSetLayout>&& _layout) override;
 
@@ -800,9 +815,10 @@ class COpenGLDriver final : public CNullDriver, public COpenGLExtensionHandler
 
 #ifdef _IRR_COMPILE_WITH_OPENCL_
         const cl_device_id& getOpenCLAssociatedDevice() const {return clDevice;}
+		const cl_context_properties* getOpenCLAssociatedContextProperties() const { return clProperties; }
 
-        const size_t& getOpenCLAssociatedDeviceID() const {return clDeviceIx;}
-        const size_t& getOpenCLAssociatedPlatformID() const {return clPlatformIx;}
+        size_t getOpenCLAssociatedDeviceID() const {return clDeviceIx;}
+        size_t getOpenCLAssociatedPlatformID() const {return clPlatformIx;}
 #endif // _IRR_COMPILE_WITH_OPENCL_
 
         struct SAuxContext
@@ -1023,6 +1039,7 @@ class COpenGLDriver final : public CNullDriver, public COpenGLExtensionHandler
         uint32_t maxShaderComputeUnits;
 #ifdef _IRR_COMPILE_WITH_OPENCL_
         cl_device_id clDevice;
+		cl_context_properties clProperties[7];
         size_t clPlatformIx, clDeviceIx;
 #endif // _IRR_COMPILE_WITH_OPENCL_
 

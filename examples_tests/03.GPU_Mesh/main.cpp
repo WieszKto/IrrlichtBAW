@@ -28,6 +28,8 @@ const char* vertexSource = R"===(
 layout(location = 0) in vec4 vPos; //only a 3d position is passed from irrlicht, but last (the W) coordinate gets filled with default 1.0
 layout(location = 1) in vec4 vCol;
 
+#include <irr/builtin/glsl/broken_driver_workarounds/amd.glsl>
+
 layout( push_constant, row_major ) uniform Block {
 	mat4 modelViewProj;
 } PushConstants;
@@ -36,7 +38,7 @@ layout(location = 0) out vec4 Color; //per vertex output color, will be interpol
 
 void main()
 {
-    gl_Position = PushConstants.modelViewProj*vPos; //only thing preventing the shader from being core-compliant
+    gl_Position = irr_builtin_glsl_workaround_AMD_broken_row_major_qualifier_mat4(PushConstants.modelViewProj)*vPos; //only thing preventing the shader from being core-compliant
     Color = vCol;
 }
 )===";
@@ -147,13 +149,19 @@ int main()
 			
 			auto createGPUSpecializedShaderFromSource = [=](const char* source, asset::ISpecializedShader::E_SHADER_STAGE stage)
 			{
-				auto spirv = device->getAssetManager()->getGLSLCompiler()->createSPIRVFromGLSL(source,stage,"main","runtimeID");
+				auto spirv = device->getAssetManager()->getGLSLCompiler()->createSPIRVFromGLSL(source, stage, "main", "runtimeID");
 				auto unspec = driver->createGPUShader(std::move(spirv));
-				return driver->createGPUSpecializedShader(unspec.get(),{core::vector<asset::ISpecializedShader::SInfo::SMapEntry>(),nullptr,"main",stage});
+				return driver->createGPUSpecializedShader(unspec.get(), { core::vector<asset::ISpecializedShader::SInfo::SMapEntry>(),nullptr,"main",stage });
+			};
+			// origFilepath is only relevant when you have filesystem #includes in your shader
+			auto createGPUSpecializedShaderFromSourceWithIncludes = [&](const char* source, asset::ISpecializedShader::E_SHADER_STAGE stage, const char* origFilepath)
+			{
+				auto resolved_includes = device->getAssetManager()->getGLSLCompiler()->resolveIncludeDirectives(source, stage, origFilepath);
+				return createGPUSpecializedShaderFromSource(reinterpret_cast<const char*>(resolved_includes->getSPVorGLSL()->getPointer()), stage);
 			};
 			core::smart_refctd_ptr<video::IGPUSpecializedShader> shaders[2] =
 			{
-				createGPUSpecializedShaderFromSource(vertexSource,asset::ISpecializedShader::ESS_VERTEX),
+				createGPUSpecializedShaderFromSourceWithIncludes(vertexSource,asset::ISpecializedShader::ESS_VERTEX, "shader.vert"),
 				createGPUSpecializedShaderFromSource(fragmentSource,asset::ISpecializedShader::ESS_FRAGMENT)
 			};
 			auto shadersPtr = reinterpret_cast<video::IGPUSpecializedShader**>(shaders);

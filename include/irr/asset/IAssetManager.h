@@ -142,13 +142,14 @@ class IAssetManager : public core::IReferenceCounted
                 m_cpuGpuCache[i] = new CpuGpuCacheType();
 
 			addLoadersAndWriters();
+            insertBuiltinAssets();
         }
 
 		inline io::IFileSystem* getFileSystem() const { return m_fileSystem.get(); }
 
         const IGeometryCreator* getGeometryCreator() const;
         const IMeshManipulator* getMeshManipulator() const;
-        const IGLSLCompiler* getGLSLCompiler() const { return m_glslCompiler.get(); }
+        IGLSLCompiler* getGLSLCompiler() const { return m_glslCompiler.get(); }
 
     protected:
 		virtual ~IAssetManager()
@@ -384,7 +385,7 @@ class IAssetManager : public core::IReferenceCounted
 			auto res = core::make_refctd_dynamic_array<core::smart_refctd_dynamic_array<SAssetBundle> >(reqSz);
             findAssets(reqSz, res->data(), _key, _types);
             auto retval = core::make_refctd_dynamic_array<core::smart_refctd_dynamic_array<SAssetBundle> >(reqSz);
-			memcpy(retval->data(),res->data(),reqSz);
+            std::move(res->begin(), res->begin()+reqSz, retval->begin());
 			return retval;
         }
 
@@ -436,10 +437,10 @@ class IAssetManager : public core::IReferenceCounted
 		However each dummy object needs to have a GPU object associated with it in yet-another-cache for use when we convert CPU objects to GPU objects.*/
         void convertAssetToEmptyCacheHandle(IAsset* _asset, core::smart_refctd_ptr<core::IReferenceCounted>&& _gpuObject, uint32_t referenceLevelsBelowToConvert=~0u)
         {
-			const uint32_t ix = IAsset::typeFlagToIndex(_asset->getAssetType());
-            _asset->grab();
             _asset->convertToDummyObject(referenceLevelsBelowToConvert);
-            m_cpuGpuCache[ix]->insert(_asset, std::move(_gpuObject));
+			const uint32_t ix = IAsset::typeFlagToIndex(_asset->getAssetType());
+            if (m_cpuGpuCache[ix]->insert(_asset, std::move(_gpuObject)))
+                _asset->grab();
         }
 
 		core::smart_refctd_ptr<core::IReferenceCounted> findGPUObject(const IAsset* _asset)
@@ -649,8 +650,12 @@ class IAssetManager : public core::IReferenceCounted
         //TODO change name
         inline void setAssetCached(SAssetBundle& _asset, bool _val) const { _asset.setCached(_val); }
 
+        inline void setAssetMutable(IAsset* _asset, bool _val) const { _asset->m_mutable = _val; }
+
 		//
 		void addLoadersAndWriters();
+
+        void insertBuiltinAssets();
 };
 
 

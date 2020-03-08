@@ -4,6 +4,7 @@
 #include "irr/video/IGPURenderpassIndependentPipeline.h"
 #include "COpenGLExtensionHandler.h"
 #include "COpenGLSpecializedShader.h"
+#include "irr/video/IOpenGLPipeline.h"
 
 #ifdef _IRR_COMPILE_WITH_OPENGL_
 namespace irr
@@ -11,22 +12,23 @@ namespace irr
 namespace video
 {
 
-class COpenGLRenderpassIndependentPipeline : public IGPURenderpassIndependentPipeline
+class COpenGLRenderpassIndependentPipeline final : public IGPURenderpassIndependentPipeline, public IOpenGLPipeline<IGPURenderpassIndependentPipeline::SHADER_STAGE_COUNT>
 {
 public:
+    //! _binaries' elements are getting move()'d!
     COpenGLRenderpassIndependentPipeline(
-        core::smart_refctd_ptr<IGPURenderpassIndependentPipeline>&& _parent,
         core::smart_refctd_ptr<IGPUPipelineLayout>&& _layout,
         IGPUSpecializedShader** _shadersBegin, IGPUSpecializedShader** _shadersEnd,
         const asset::SVertexInputParams& _vertexInputParams,
         const asset::SBlendParams& _blendParams,
         const asset::SPrimitiveAssemblyParams& _primAsmParams,
-        const asset::SRasterizationParams& _rasterParams
+        const asset::SRasterizationParams& _rasterParams,
+        uint32_t _ctxCount, uint32_t _ctxID, const GLuint _GLnames[SHADER_STAGE_COUNT], const COpenGLSpecializedShader::SProgramBinary _binaries[SHADER_STAGE_COUNT]
     ) : IGPURenderpassIndependentPipeline(
-        std::move(_parent),
         std::move(_layout), _shadersBegin, _shadersEnd,
         _vertexInputParams, _blendParams, _primAsmParams, _rasterParams
         ),
+        IOpenGLPipeline(_ctxCount, _ctxID, _GLnames, _binaries),
         m_stagePresenceMask(0u)
     {
         static_assert(asset::SVertexInputParams::MAX_ATTR_BUF_BINDING_COUNT == asset::SVertexInputParams::MAX_VERTEX_ATTRIB_COUNT, "This code below has to be divided into 2 loops");
@@ -55,6 +57,27 @@ public:
     }
 
     uint32_t getStagePresenceMask() const { return m_stagePresenceMask; }
+
+    GLuint getShaderGLnameForCtx(uint32_t _stageIx, uint32_t _ctxID) const
+    {
+        if (!m_shaders[_stageIx])
+            return 0u;
+
+        return IOpenGLPipeline<SHADER_STAGE_COUNT>::getShaderGLnameForCtx(_stageIx, _ctxID);
+    }
+
+    void setUniformsImitatingPushConstants(uint32_t _stageIx, uint32_t _ctxID, const uint8_t* _pcData) const
+    {
+        if (!m_shaders[_stageIx])
+            return;
+
+        auto uniforms = static_cast<COpenGLSpecializedShader*>(m_shaders[_stageIx].get())->getUniforms();
+        auto locations = static_cast<COpenGLSpecializedShader*>(m_shaders[_stageIx].get())->getLocations();
+        if (!uniforms.length())
+            return;
+
+        IOpenGLPipeline<SHADER_STAGE_COUNT>::setUniformsImitatingPushConstants(_stageIx, _ctxID, _pcData, uniforms, locations);
+    }
 
     struct SVAOHash
     {
@@ -118,7 +141,7 @@ public:
                 uint64_t mapAttrToBinding;//16*4 bits
                 uint16_t divisors;
                 //E_FORMAT values
-                uint8_t attribFormatAndComponentCount[16];//attribute X is enabled if attribFormatAndComponentCount[X]==EF_UNKNOWN
+                uint8_t attribFormatAndComponentCount[16];//attribute X is enabled if attribFormatAndComponentCount[X]!=EF_UNKNOWN
             } PACK_STRUCT;
 #include "irr/irrunpack.h"
             uint32_t hashVal[19]{};
@@ -149,18 +172,18 @@ public:
             assert(!(_val & (~0xfffull)));//bits higher than [0..11] must not be set
             if (_ix == 5u)
             {
-                _bits[0] &= (~(0xfull >> 60));
-                _bits[0] |= (_val >> 60);
+                _bits[0] &= (~(0xfull << 60));
+                _bits[0] |= (_val << 60);
                 _bits[1] &= (~0xffull);
-                _bits[1] |= (_val << 4);
+                _bits[1] |= (_val >> 4);
                 return;
             }
             if (_ix == 11u)
             {
-                _bits[1] &= (~(0xffull >> 56));
-                _bits[1] |= (_val >> 56);
+                _bits[1] &= (~(0xffull << 56));
+                _bits[1] |= (_val << 56);
                 _bits[2] &= (~0xfull);
-                _bits[2] |= (_val << 8);
+                _bits[2] |= (_val >> 8);
                 return;
             }
 
@@ -173,32 +196,10 @@ public:
 
     const SVAOHash& getVAOHash() const { return m_vaoHashval; }
 
+protected:
+    ~COpenGLRenderpassIndependentPipeline() = default;
+
 private:
-    // TODO move GL object creation to driver
-    GLuint createGLobject(uint32_t _ctxID)
-    {
-        static_assert(SHADER_STAGE_COUNT == 5u, "SHADER_STAGE_COUNT is expected to be 5");
-        const GLenum stages[SHADER_STAGE_COUNT]{ GL_VERTEX_SHADER, GL_TESS_CONTROL_SHADER, GL_TESS_EVALUATION_SHADER, GL_GEOMETRY_SHADER, GL_FRAGMENT_SHADER };
-        const GLenum stageFlags[SHADER_STAGE_COUNT]{ GL_VERTEX_SHADER_BIT, GL_TESS_CONTROL_SHADER_BIT, GL_TESS_EVALUATION_SHADER_BIT, GL_GEOMETRY_SHADER_BIT, GL_FRAGMENT_SHADER_BIT };
-
-        GLuint pipeline = 0u;
-        COpenGLExtensionHandler::extGlCreateProgramPipelines(1u, &pipeline);
-        
-        for (uint32_t ix = 0u; ix < SHADER_STAGE_COUNT; ++ix) {
-            COpenGLSpecializedShader* glshdr = static_cast<COpenGLSpecializedShader*>(m_shaders[ix].get());
-            GLuint progName = 0u;
-
-            if (!glshdr || glshdr->getStage() != stages[ix])
-                continue;
-            progName = glshdr->getGLnameForCtx(_ctxID);
-
-            if (progName)
-                COpenGLExtensionHandler::extGlUseProgramStages(pipeline, stageFlags[ix], progName);
-        }
-        
-        return pipeline;
-    }
-
     SVAOHash m_vaoHashval;
     uint32_t m_stagePresenceMask;
 };

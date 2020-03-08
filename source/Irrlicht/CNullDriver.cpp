@@ -6,6 +6,7 @@
 #include "os.h"
 #include "IAnimatedMeshSceneNode.h"
 #include "irr/asset/CMeshManipulator.h"
+#include "irr/asset/asset_utils.h"
 
 #include <new>
 #include "IrrlichtDevice.h"
@@ -108,84 +109,6 @@ bool CNullDriver::genericDriverInit(asset::IAssetManager* assMgr)
 		defaultUploadBuffer = core::make_smart_refctd_ptr < video::StreamingTransientDataBufferMT<> >(this, reqs);
 	}
 
-
-	auto addBuiltInToCaches = [&](auto asset, const char* path) -> void
-	{
-		asset::SAssetBundle bundle({asset});
-		assMgr->changeAssetKey(bundle,path);
-		assMgr->insertAssetIntoCache(bundle);
-		auto objects = getGPUObjectsFromAssets(&asset.get(),&asset.get()+1);
-		assMgr->convertAssetToEmptyCacheHandle(asset.get(),std::move(objects->front()));
-	};
-	// materials
-	{
-		//
-		auto buildInShader = [&](const char* source, asset::ISpecializedShader::E_SHADER_STAGE type, const char* path) -> void
-		{
-			auto shader = core::make_smart_refctd_ptr<asset::ICPUSpecializedShader>(core::make_smart_refctd_ptr<asset::ICPUShader>(source),
-																					asset::ISpecializedShader::SInfo({},nullptr,"main",type));
-			addBuiltInToCaches(shader,path);
-		};
-		buildInShader(R"===(
-#version 430 core
-layout(location = 0) in vec3 vPos;
-layout(location = 2) in vec2 vTexCoord;
-
-layout(push_constant, row_major) uniform Block {
-	mat4 modelViewProj;
-} PushConstants;
-
-layout(location = 0) out vec2 uv;
-
-void main()
-{
-    gl_Position = PushConstants.modelViewProj*vec4(vPos,1.0);
-	uv = vTexCoord;
-}
-		)===",asset::ISpecializedShader::ESS_VERTEX,"irr/builtin/materials/lambertian/singletexture/specializedshader");
-		buildInShader(R"===(
-#version 430 core
-
-layout(set = 0, binding = 0) uniform sampler2D albedo;
-
-layout(location = 0) in vec2 uv;
-
-layout(location = 0) out vec4 pixelColor;
-
-void main()
-{
-    pixelColor = texture(albedo,uv);
-}
-		)===",asset::ISpecializedShader::ESS_FRAGMENT,"irr/builtin/materials/lambertian/singletexture/specializedshader");
-
-		constexpr uint32_t bindingCount = 1u;
-		asset::ICPUDescriptorSetLayout::SBinding pBindings[bindingCount] = {0u,asset::EDT_COMBINED_IMAGE_SAMPLER,1u,asset::ISpecializedShader::ESS_FRAGMENT,nullptr};
-		auto dsLayout = core::make_smart_refctd_ptr<asset::ICPUDescriptorSetLayout>(pBindings,pBindings+bindingCount);
-		addBuiltInToCaches(dsLayout,"irr/builtin/materials/lambertian/singletexture/descriptorsetlayout/2");
-		//
-		constexpr uint32_t pcCount = 1u;
-		asset::SPushConstantRange pcRanges[pcCount] = {asset::ISpecializedShader::ESS_VERTEX,0u,sizeof(core::matrix4SIMD)};
-		auto pLayout = core::make_smart_refctd_ptr<asset::ICPUPipelineLayout>(pcRanges,pcRanges+pcCount,nullptr,nullptr,core::smart_refctd_ptr(dsLayout),nullptr);
-		addBuiltInToCaches(pLayout,"irr/builtin/materials/lambertian/singletexture/pipelinelayout");
-	}
-
-	// samplers
-	{
-		asset::ISampler::SParams params;
-		params.TextureWrapU = asset::ISampler::ETC_REPEAT;
-		params.TextureWrapV = asset::ISampler::ETC_REPEAT;
-		params.TextureWrapW = asset::ISampler::ETC_REPEAT;
-		params.BorderColor = asset::ISampler::ETBC_FLOAT_OPAQUE_BLACK;
-		params.MinFilter = asset::ISampler::ETF_LINEAR;
-		params.MaxFilter = asset::ISampler::ETF_LINEAR;
-		params.MipmapMode = asset::ISampler::ESMM_LINEAR;
-		params.CompareEnable = false;
-		params.CompareFunc = asset::ISampler::ECO_ALWAYS;
-		params.AnisotropicFilter = 4u;
-		auto sampler = core::make_smart_refctd_ptr<asset::ICPUSampler>(params);
-		addBuiltInToCaches(sampler,"irr/builtin/samplers/default");
-	}
-
 	DerivativeMapCreator = core::make_smart_refctd_ptr<CDerivativeMapCreator>(this);
 
 	return true;
@@ -211,11 +134,11 @@ bool CNullDriver::endScene()
 
 void CNullDriver::bindDescriptorSets_generic(const IGPUPipelineLayout* _newLayout, uint32_t _first, uint32_t _count, const IGPUDescriptorSet* const* _descSets, const IGPUPipelineLayout** _destPplnLayouts)
 {
-    uint32_t compatibilityLimits[IGPUPipelineLayout::DESCRIPTOR_SET_COUNT]{}; //actually more like "compatibility limit + 1" (i.e. 0 mean not comaptible at all)
+    int32_t compatibilityLimits[IGPUPipelineLayout::DESCRIPTOR_SET_COUNT]{};
     for (uint32_t i=0u; i<IGPUPipelineLayout::DESCRIPTOR_SET_COUNT; i++)
     {
-        const uint32_t lim = _destPplnLayouts[i] ? //if no descriptor set bound at this index
-            _destPplnLayouts[i]->isCompatibleUpToSet(IGPUPipelineLayout::DESCRIPTOR_SET_COUNT-1u, _newLayout) : 0u;
+        const int32_t lim = _destPplnLayouts[i] ? //if no descriptor set bound at this index
+            _destPplnLayouts[i]->isCompatibleUpToSet(IGPUPipelineLayout::DESCRIPTOR_SET_COUNT-1u, _newLayout) : -1;
 
         compatibilityLimits[i] = lim;
     }
@@ -224,16 +147,15 @@ void CNullDriver::bindDescriptorSets_generic(const IGPUPipelineLayout* _newLayou
     https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#descriptorsets-compatibility
     When binding a descriptor set (see Descriptor Set Binding) to set number N, if the previously bound descriptor sets for sets zero through N-1 were all bound using compatible pipeline layouts, then performing this binding does not disturb any of the lower numbered sets.
     */
-    for (uint32_t i = 0u; i < _first; i++)
-        if (compatibilityLimits[i] <= i)
+    for (int32_t i = 0; i < static_cast<int32_t>(_first); ++i)
+        if (compatibilityLimits[i] < i)
             _destPplnLayouts[i] = nullptr;
-
     /*
     If, additionally, the previous bound descriptor set for set N was bound using a pipeline layout compatible for set N, then the bindings in sets numbered greater than N are also not disturbed.
     */
-    if (compatibilityLimits[_first] <= _first)
-        for (uint32_t i = _first+_count; i<IGPUPipelineLayout::DESCRIPTOR_SET_COUNT; i++)
-            _destPplnLayouts = nullptr;
+    if (compatibilityLimits[_first] < _first)
+        for (uint32_t i = _first+1u; i<IGPUPipelineLayout::DESCRIPTOR_SET_COUNT; ++i)
+            _destPplnLayouts[i] = nullptr;
 }
 
 //! gets the area of the current viewport
@@ -294,6 +216,8 @@ void CNullDriver::drawMeshBuffer(const IGPUMeshBuffer* mb)
 {
 	if (!mb)
 		return;
+    if (!mb->getPipeline())
+        return;
 
     uint32_t increment = mb->getInstanceCount();
     switch (mb->getPipeline()->getPrimitiveAssemblyParams().primitiveType)

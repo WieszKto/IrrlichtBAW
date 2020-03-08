@@ -36,13 +36,41 @@ include(common)
 
 #[[ Loaders and writers compile options available to edit by user
 	All revelant _IRR_COMPILE_WITH will be there]]
+option(_IRR_COMPILE_WITH_MTL_LOADER_ "Compile with MTL Loader" ON)
+option(_IRR_COMPILE_WITH_OBJ_LOADER_ "Compile with OBJ Loader" ON)
+#option(_IRR_COMPILE_WITH_OBJ_WRITER_ "Compile with OBJ Writer" ON) uncomment when writer exists
+option(_IRR_COMPILE_WITH_STL_LOADER_ "Compile with STL Loader" ON)
+option(_IRR_COMPILE_WITH_STL_WRITER_ "Compile with STL Writer" ON)
+option(_IRR_COMPILE_WITH_PLY_LOADER_ "Compile with PLY Loader" ON)
+option(_IRR_COMPILE_WITH_PLY_WRITER_ "Compile with PLY Writer" ON)
+option(_IRR_COMPILE_WITH_BAW_LOADER_ "Compile with BAW Loader" ON)
+option(_IRR_COMPILE_WITH_BAW_WRITER_ "Compile with BAW Writer" ON)
+option(_IRR_COMPILE_WITH_JPG_LOADER_ "Compile with JPG Loader" ON)
+option(_IRR_COMPILE_WITH_JPG_WRITER_ "Compile with JPG Writer" ON)
+option(_IRR_COMPILE_WITH_PNG_LOADER_ "Compile with PNG Loader" ON)
+option(_IRR_COMPILE_WITH_PNG_WRITER_ "Compile with PNG Writer" ON)
+option(_IRR_COMPILE_WITH_TGA_LOADER_ "Compile with TGA Loader" ON)
+option(_IRR_COMPILE_WITH_TGA_WRITER_ "Compile with TGA Writer" ON)
 option(_IRR_COMPILE_WITH_OPENEXR_LOADER_ "Compile with OpenEXR Loader" ON)
 option(_IRR_COMPILE_WITH_OPENEXR_WRITER_ "Compile with OpenEXR Writer" ON)
+option(_IRR_COMPILE_WITH_GLI_LOADER_ "Compile with GLI Loader" ON)
+option(_IRR_COMPILE_WITH_GLI_WRITER_ "Compile with GLI Writer" ON)
 
 irr_get_conf_dir(IRRLICHT_CONF_DIR_DEBUG Debug)
 irr_get_conf_dir(IRRLICHT_CONF_DIR_RELEASE Release)
 
 set(_IRR_COMPILE_WITH_OPENGL_ ${IRR_COMPILE_WITH_OPENGL})
+if (IRR_COMPILE_WITH_OPENCL)
+	find_package(OpenCL)
+
+	if (OpenCL_FOUND)
+		message(STATUS "Building with OpenCL interop")
+		
+		set(_IRR_COMPILE_WITH_OPENCL_ ${IRR_COMPILE_WITH_OPENCL})
+	else()
+		message(STATUS "OpenCL not found")
+	endif()
+endif()
 #set(_IRR_TARGET_ARCH_ARM_ ${IRR_TARGET_ARCH_ARM}) #uncomment in the future
 set(__IRR_FAST_MATH ${IRR_FAST_MATH})
 set(_IRR_DEBUG 0)
@@ -71,6 +99,8 @@ set(IRRLICHT_SRCS_COMMON
 	${IRR_ROOT_PATH}/src/irr/asset/CPLYMeshFileLoader.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CSTLMeshFileLoader.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CBufferLoaderBIN.cpp
+	
+	${IRR_ROOT_PATH}/src/irr/asset/CGraphicsPipelineLoaderMTL.cpp
 
 # Mesh writers
 	${IRR_ROOT_PATH}/src/irr/asset/CBAWMeshWriter.cpp
@@ -131,15 +161,16 @@ set(IRRLICHT_SRCS_COMMON
 	${IRR_ROOT_PATH}/src/irr/asset/IImageLoader.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/IImageWriter.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/IImageAssetHandlerBase.cpp
-	${IRR_ROOT_PATH}/src/irr/asset/CImageLoaderDDS.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageLoaderJPG.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageLoaderPNG.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageLoaderTGA.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageLoaderOpenEXR.cpp
+	${IRR_ROOT_PATH}/src/irr/asset/CGLILoader.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageWriterJPG.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageWriterPNG.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageWriterTGA.cpp
 	${IRR_ROOT_PATH}/src/irr/asset/CImageWriterOpenEXR.cpp
+	${IRR_ROOT_PATH}/src/irr/asset/CGLIWriter.cpp
 
 # Video
 	CFPSCounter.cpp
@@ -184,6 +215,7 @@ set(IRRLICHT_SRCS_NORMAL
 	COpenGLExtensionHandler.cpp
 	COpenGLFrameBuffer.cpp
 	COpenGLQuery.cpp
+	${IRR_ROOT_PATH}/src/irr/video/COpenGLPipelineCache.cpp
 
 	# abstract (move this out eventually)
 	${IRR_ROOT_PATH}/src/irr/video/CDerivativeMapCreator.cpp
@@ -195,6 +227,7 @@ set(IRRLICHT_SRCS_SERVER
 set(COMMON_INCLUDE_DIRS
 	${THIRD_PARTY_SOURCE_DIR}/convertutf
 	${THIRD_PARTY_SOURCE_DIR}/utfcpp/source
+	${THIRD_PARTY_SOURCE_DIR}/glm
 	${CMAKE_BINARY_DIR}/3rdparty/zlib #for dynamically generated zconf.h
 	${CMAKE_BINARY_DIR}/3rdparty/openexr/IlmBase/config #for dynamically generated IlmBaseConfig.h
 	${CMAKE_BINARY_DIR}/3rdparty/openexr/OpenEXR/config #for dynamically generated OpenEXRConfig.h
@@ -212,6 +245,12 @@ macro(irr_target_link_zlib _trgt)
 	)
 	target_include_directories(${_trgt} PUBLIC ${THIRD_PARTY_SOURCE_DIR}/zlib)
 endmacro()
+
+#Paraller hashmap
+macro(irr_target_include_parallel_hashmap _trgt)
+	target_include_directories(${_trgt} PUBLIC ${THIRD_PARTY_SOURCE_DIR}/parallel-hashmap/parallel_hashmap)
+endmacro()
+
 macro(irr_target_link_openssl _trgt)
 	if(WIN32)
 		target_link_libraries(${_trgt} INTERFACE
@@ -261,6 +300,13 @@ macro(irr_target_link_openexr _trgt)
 							   ${_trgt} PUBLIC ${THIRD_PARTY_SOURCE_DIR}/openexr/IlmBase/IlmThread						   
 	)
 endmacro()
+macro(irr_target_link_gli _trgt)
+	add_dependencies(${_trgt} gli)
+	target_link_libraries(${_trgt} INTERFACE
+		gli
+	)
+	target_include_directories(${_trgt} PUBLIC ${THIRD_PARTY_SOURCE_DIR}/gli)
+endmacro()
 
 # get function for cross-compiler PCH configuration
 include(add_pch)
@@ -284,6 +330,10 @@ irr_target_link_shaderc(Irrlicht)
 irr_target_link_libjpeg(Irrlicht)
 irr_target_link_libpng(Irrlicht)
 irr_target_link_openexr(Irrlicht)
+if(_IRR_COMPILE_WITH_GLI_)
+	irr_target_link_gli(Irrlicht)
+endif()
+irr_target_include_parallel_hashmap(Irrlicht)
 
 target_link_libraries(Irrlicht INTERFACE ${OPENGL_gl_LIBRARY})
 if (UNIX)
@@ -313,13 +363,15 @@ if (UNIX)
 		${X11_xf86vmode_INCLUDE_PATH})
 endif()
 
-find_package(Vulkan)
 
+if (IRR_COMPILE_WITH_OPENCL AND OpenCL_FOUND)
+	target_link_libraries(Irrlicht PUBLIC OpenCL::OpenCL)
+endif()
+
+# TODO: REDO
+find_package(Vulkan)
 if (Vulkan_FOUND)
 	message(STATUS "Building with Vulkan driver")
-	#target_compile_definitions(Irrlicht PRIVATE
-	#	_IRR_COMPILE_WITH_VULKAN_
-	#)
 	#target_link_libraries(Irrlicht INTERFACE Vulkan::Vulkan) # this should work, but it doesn't
 	#target_link_libraries(Irrlicht INTERFACE ${Vulkan_LIBRARY})
 else()
@@ -361,6 +413,10 @@ irr_target_link_shaderc(IrrlichtServer)
 irr_target_link_libjpeg(IrrlichtServer)
 irr_target_link_libpng(IrrlichtServer)
 irr_target_link_openexr(IrrlichtServer)
+if(_IRR_COMPILE_WITH_GLI_)
+	irr_target_link_gli(IrrlichtServer)
+endif()
+irr_target_include_parallel_hashmap(IrrlichtServer)
 
 target_include_directories(IrrlichtServer PUBLIC 
 	${IRR_ROOT_PATH}/include

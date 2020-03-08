@@ -16,26 +16,29 @@ class ICPURenderpassIndependentPipeline : public IRenderpassIndependentPipeline<
 		using base_t = IRenderpassIndependentPipeline<ICPUSpecializedShader, ICPUPipelineLayout>;
 
 	public:
+        _IRR_STATIC_INLINE_CONSTEXPR uint32_t DESC_SET_HIERARCHYLEVELS_BELOW = 0u;
+        _IRR_STATIC_INLINE_CONSTEXPR uint32_t IMAGEVIEW_HIERARCHYLEVELS_BELOW = 1u;
+        _IRR_STATIC_INLINE_CONSTEXPR uint32_t IMAGE_HIERARCHYLEVELS_BELOW = 2u;
+
+
 		using base_t::base_t;
 
 		size_t conservativeSizeEstimate() const override { return sizeof(base_t); }
 		void convertToDummyObject(uint32_t referenceLevelsBelowToConvert=0u) override
 		{
-			if (referenceLevelsBelowToConvert--)
+			if (referenceLevelsBelowToConvert)
 			{
-				static_cast<ICPURenderpassIndependentPipeline*>(m_parent.get())->convertToDummyObject(referenceLevelsBelowToConvert);
+                //intentionally parent is not converted
+                --referenceLevelsBelowToConvert;
 				m_layout->convertToDummyObject(referenceLevelsBelowToConvert);
 				for (auto i=0u; i<SHADER_STAGE_COUNT; i++)
-					m_shaders[i]->convertToDummyObject(referenceLevelsBelowToConvert);
+                    if (m_shaders[i])
+					    m_shaders[i]->convertToDummyObject(referenceLevelsBelowToConvert);
 			}
 		}
 
         core::smart_refctd_ptr<IAsset> clone(uint32_t _depth = ~0u) const override
         {
-            core::smart_refctd_ptr<ICPURenderpassIndependentPipeline> parent =
-                (_depth > 0u && m_parent) ?
-                core::smart_refctd_ptr_static_cast<ICPURenderpassIndependentPipeline>( static_cast<ICPURenderpassIndependentPipeline*>(m_parent.get())->clone(_depth-1u) ) :
-                core::smart_refctd_ptr_static_cast<ICPURenderpassIndependentPipeline>(m_parent);
             core::smart_refctd_ptr<ICPUPipelineLayout> layout = (_depth > 0u && m_layout) ? core::smart_refctd_ptr_static_cast<ICPUPipelineLayout>(m_layout->clone(_depth-1u)) : m_layout;
 
             std::array<core::smart_refctd_ptr<ICPUSpecializedShader>, SHADER_STAGE_COUNT> shaders;
@@ -46,13 +49,11 @@ class ICPURenderpassIndependentPipeline : public IRenderpassIndependentPipeline<
                 shaders_raw[i] = shaders[i].get();
             std::sort(shaders_raw.begin(), shaders_raw.end(), [](ICPUSpecializedShader* a, ICPUSpecializedShader* b) { return (a && !b); });
 
-            auto cp = core::make_smart_refctd_ptr<ICPURenderpassIndependentPipeline>(
-                std::move(parent), std::move(layout),
+            auto cp = core::make_smart_refctd_ptr<ICPURenderpassIndependentPipeline>(std::move(layout),
                 shaders_raw.data(), &*std::find(shaders_raw.begin(), shaders_raw.end(), nullptr),
                 m_vertexInputParams, m_blendParams, m_primAsmParams, m_rasterParams
             );
-
-            cp->m_mutable = true;
+            clone_common(cp.get());
 
             return cp;
         }

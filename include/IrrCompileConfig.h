@@ -72,6 +72,10 @@
 #   define NO_IRR_LINUX_X11_RANDR_
 #endif
 
+#ifdef _MSC_VER
+#	define _ENABLE_EXTENDED_ALIGNED_STORAGE
+#endif
+
 //! VidMode is ANCIENT
 //#define NO_IRR_LINUX_X11_VIDMODE_
 
@@ -126,75 +130,6 @@ the engine will no longer read .png images. */
 
 //! Uncomment the following line if you want to ignore the deprecated warnings
 //#define IGNORE_DEPRECATED_WARNING
-
-
-//! Define _IRR_COMPILE_WITH_OBJ_LOADER_ if you want to load Wavefront OBJ files
-#define _IRR_COMPILE_WITH_OBJ_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_OBJ_LOADER_
-#undef _IRR_COMPILE_WITH_OBJ_LOADER_
-#endif
-//! Define _IRR_COMPILE_WITH_STL_LOADER_ if you want to load stereolithography files
-#define _IRR_COMPILE_WITH_STL_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_STL_LOADER_
-#undef _IRR_COMPILE_WITH_STL_LOADER_
-#endif
-#define _IRR_COMPILE_WITH_BAW_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_BAW_LOADER_
-#undef _IRR_COMPILE_WITH_BAW_LOADER_
-#endif
-//! Define _IRR_COMPILE_WITH_PLY_LOADER_ if you want to load Polygon (Stanford Triangle) files
-#define _IRR_COMPILE_WITH_PLY_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_PLY_LOADER_
-#undef _IRR_COMPILE_WITH_PLY_LOADER_
-#endif
-
-//! Define _IRR_COMPILE_WITH_STL_WRITER_ if you want to write .stl files
-#define _IRR_COMPILE_WITH_STL_WRITER_
-#ifdef NO_IRR_COMPILE_WITH_STL_WRITER_
-#undef _IRR_COMPILE_WITH_STL_WRITER_
-#endif
-//! Define _IRR_COMPILE_WITH_BAW_WRITER_ if you want to write .baw files
-#define _IRR_COMPILE_WITH_BAW_WRITER_
-#ifdef NO_IRR_COMPILE_WITH_BAW_WRITER_
-#undef _IRR_COMPILE_WITH_BAW_WRITER_
-#endif
-//! Define _IRR_COMPILE_WITH_PLY_WRITER_ if you want to write .ply files
-#define _IRR_COMPILE_WITH_PLY_WRITER_
-#ifdef NO_IRR_COMPILE_WITH_PLY_WRITER_
-#undef _IRR_COMPILE_WITH_PLY_WRITER_
-#endif
-
-//! Define _IRR_COMPILE_WITH_JPG_LOADER_ if you want to load .jpg files
-#define _IRR_COMPILE_WITH_JPG_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_JPG_LOADER_
-#undef _IRR_COMPILE_WITH_JPG_LOADER_
-#endif
-//! Define _IRR_COMPILE_WITH_PNG_LOADER_ if you want to load .png files
-#define _IRR_COMPILE_WITH_PNG_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_PNG_LOADER_
-#undef _IRR_COMPILE_WITH_PNG_LOADER_
-#endif
-//! Define _IRR_COMPILE_WITH_TGA_LOADER_ if you want to load .tga files
-#define _IRR_COMPILE_WITH_TGA_LOADER_
-#ifdef NO_IRR_COMPILE_WITH_TGA_LOADER_
-#undef _IRR_COMPILE_WITH_TGA_LOADER_
-#endif
-
-//! Define _IRR_COMPILE_WITH_JPG_WRITER_ if you want to write .jpg files
-#define _IRR_COMPILE_WITH_JPG_WRITER_
-#ifdef NO_IRR_COMPILE_WITH_JPG_WRITER_
-#undef _IRR_COMPILE_WITH_JPG_WRITER_
-#endif
-//! Define _IRR_COMPILE_WITH_PNG_WRITER_ if you want to write .png files
-#define _IRR_COMPILE_WITH_PNG_WRITER_
-#ifdef NO_IRR_COMPILE_WITH_PNG_WRITER_
-#undef _IRR_COMPILE_WITH_PNG_WRITER_
-#endif
-//! Define _IRR_COMPILE_WITH_TGA_WRITER_ if you want to write .tga files
-#define _IRR_COMPILE_WITH_TGA_WRITER_
-#ifdef NO_IRR_COMPILE_WITH_TGA_WRITER_
-#undef _IRR_COMPILE_WITH_TGA_WRITER_
-#endif
 
 //! Define __IRR_COMPILE_WITH_ZIP_ARCHIVE_LOADER_ if you want to open ZIP and GZIP archives
 /** ZIP reading has several more options below to configure. */
@@ -290,7 +225,7 @@ currently only supports zip archives, though. */
 #endif
 
 
-#define _IRR_BAW_FORMAT_VERSION 1
+#define _IRR_BAW_FORMAT_VERSION 2
 
 //! @see @ref CBlobsLoadingManager
 #define _IRR_ADD_BLOB_SUPPORT(BlobClassName, EnumValue, Function, ...) \
@@ -300,11 +235,13 @@ case asset::Blob::EnumValue:\
 //! Used inside CBlobsLoadingManager. Adds support of given blob types.
 // @crisspl / @Anastazluk fix this shit for new pipeline !!!
 #define _IRR_SUPPORTED_BLOBS(Function, ...) \
-_IRR_ADD_BLOB_SUPPORT(RawBufferBlobV1, EBT_RAW_DATA_BUFFER, Function, __VA_ARGS__)\
-_IRR_ADD_BLOB_SUPPORT(MeshBlobV1, EBT_MESH, Function, __VA_ARGS__)\
-_IRR_ADD_BLOB_SUPPORT(SkinnedMeshBlobV1, EBT_SKINNED_MESH, Function, __VA_ARGS__)\
-_IRR_ADD_BLOB_SUPPORT(MeshBufferBlobV1, EBT_MESH_BUFFER, Function, __VA_ARGS__)\
-_IRR_ADD_BLOB_SUPPORT(SkinnedMeshBufferBlobV1, EBT_SKINNED_MESH_BUFFER, Function, __VA_ARGS__)\
-_IRR_ADD_BLOB_SUPPORT(FinalBoneHierarchyBlobV1, EBT_FINAL_BONE_HIERARCHY, Function, __VA_ARGS__)
+_IRR_ADD_BLOB_SUPPORT(RawBufferBlobV2, EBT_RAW_DATA_BUFFER, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(TexturePathBlobV2, EBT_TEXTURE_PATH, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(MeshBlobV2, EBT_MESH, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(SkinnedMeshBlobV2, EBT_SKINNED_MESH, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(MeshBufferBlobV2, EBT_MESH_BUFFER, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(SkinnedMeshBufferBlobV2, EBT_SKINNED_MESH_BUFFER, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(MeshDataFormatDescBlobV2, EBT_DATA_FORMAT_DESC, Function, __VA_ARGS__)\
+_IRR_ADD_BLOB_SUPPORT(FinalBoneHierarchyBlobV2, EBT_FINAL_BONE_HIERARCHY, Function, __VA_ARGS__)
 
 #endif // __IRR_COMPILE_CONFIG_H_INCLUDED__
